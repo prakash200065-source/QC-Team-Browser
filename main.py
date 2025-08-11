@@ -8,7 +8,6 @@ from typing import Optional
 import logging
 from urllib.parse import urljoin, urlparse
 import time
-import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +30,7 @@ async def get_browser():
         playwright = await async_playwright().start()
         browser_instance = await playwright.chromium.launch(
             headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-dev-tools']
+            args=['--no-sandbox', '--disable-dev-shm-usage']
         )
     return browser_instance
 
@@ -624,12 +623,10 @@ async def root():
     }
 
 if __name__ == "__main__":
-    # Get port from environment variable (Render assigns this)
-    PORT = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         app, 
         host="0.0.0.0", 
-        port=PORT,
+        port=8000,
         reload=False,
         access_log=True
     )
