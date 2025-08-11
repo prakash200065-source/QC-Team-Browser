@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Query, HTTPException
 from playwright.async_api import async_playwright
 import uvicorn
@@ -30,7 +31,7 @@ async def get_browser():
         playwright = await async_playwright().start()
         browser_instance = await playwright.chromium.launch(
             headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage']
+            args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-web-security']
         )
     return browser_instance
 
@@ -48,8 +49,11 @@ async def shutdown_event():
     """Close browser on shutdown"""
     global browser_instance
     if browser_instance:
-        await browser_instance.close()
-        logger.info("Browser closed successfully")
+        try:
+            await browser_instance.close()
+            logger.info("Browser closed successfully")
+        except Exception as e:
+            logger.warning(f"Browser cleanup error: {e}")
 
 def is_valid_url(url: str) -> bool:
     """Validate URL format"""
@@ -596,17 +600,22 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "browser_ready": browser_instance is not None
+        "browser_ready": browser_instance is not None,
+        "port": os.getenv("PORT", "10000"),
+        "host": "0.0.0.0"
     }
 
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "Advanced Web Scraper API",
+        "message": "Advanced Web Scraper API - Running on Render.com",
         "version": "1.0.0",
+        "host": "0.0.0.0",
+        "port": os.getenv("PORT", "10000"),
         "endpoints": {
             "scrape": "/scrape?url=<URL>&timeout=30&wait_time=3&full_screenshot=true",
+            "markdown": "/markdown?url=<URL>&timeout=30&include_images=true",
             "health": "/health",
             "docs": "/docs"
         },
@@ -618,15 +627,20 @@ async def root():
             "Table data extraction",
             "Metadata extraction",
             "Performance statistics",
-            "Full page screenshots"
+            "Full page screenshots",
+            "Render.com optimized"
         ]
     }
 
+# CRITICAL: Render.com configuration
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", 10000))
     uvicorn.run(
         app, 
-        host="0.0.0.0", 
-        port=8000,
+        host="0.0.0.0",  # MUST be 0.0.0.0 for Render.com
+        port=port,       # MUST use PORT environment variable
         reload=False,
-        access_log=True
+        access_log=True,
+        timeout_keep_alive=120,  # Increase timeout for Render
+        timeout_notify=120
     )
