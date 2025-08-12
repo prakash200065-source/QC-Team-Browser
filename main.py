@@ -9,6 +9,7 @@ from typing import Optional
 import logging
 from urllib.parse import urljoin, urlparse
 import time
+from contextlib import asynccontextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,44 +17,54 @@ logger = logging.getLogger(__name__)
 
 nest_asyncio.apply()
 
-app = FastAPI(
-    title="Advanced Web Scraper API",
-    description="Complete web scraping API with error handling and comprehensive content extraction",
-    version="1.0.0"
-)
-
 # Global browser instance for better performance
 browser_instance = None
+playwright_instance = None
 
 async def get_browser():
-    global browser_instance
+    global browser_instance, playwright_instance
     if browser_instance is None:
-        playwright = await async_playwright().start()
-        browser_instance = await playwright.chromium.launch(
+        playwright_instance = await async_playwright().start()
+        browser_instance = await playwright_instance.chromium.launch(
             headless=True,
             args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-web-security']
         )
     return browser_instance
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize browser on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events using modern lifespan"""
+    # Startup
     try:
         await get_browser()
         logger.info("Browser initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize browser: {e}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close browser on shutdown"""
-    global browser_instance
+    
+    yield
+    
+    # Shutdown
+    global browser_instance, playwright_instance
     if browser_instance:
         try:
             await browser_instance.close()
             logger.info("Browser closed successfully")
         except Exception as e:
             logger.warning(f"Browser cleanup error: {e}")
+    
+    if playwright_instance:
+        try:
+            await playwright_instance.stop()
+            logger.info("Playwright stopped successfully")
+        except Exception as e:
+            logger.warning(f"Playwright cleanup error: {e}")
+
+app = FastAPI(
+    title="Advanced Web Scraper API",
+    description="Complete web scraping API with error handling and comprehensive content extraction",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 def is_valid_url(url: str) -> bool:
     """Validate URL format"""
@@ -641,6 +652,5 @@ if __name__ == "__main__":
         port=port,       # MUST use PORT environment variable
         reload=False,
         access_log=True,
-        timeout_keep_alive=120,  # Increase timeout for Render
-        timeout_notify=120
+        timeout_keep_alive=120  # Removed timeout_notify parameter
     )
